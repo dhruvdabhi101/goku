@@ -38,6 +38,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p goku-core
+      - name: Build goku-cli
+        run: cargo build --release -p goku-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goku-cli-windows-x64
+          path: target/release/goku-cli.exe
+          retention-days: 14
 
   electron-app:
     runs-on: macos-latest
