@@ -60,6 +60,11 @@ jobs:
       - name: Build the Windows app folder
         working-directory: examples/electron-app
         run: npm ci && npm run build
+      - name: Smoke test the Windows app
+        working-directory: examples/electron-app
+        env:
+          GOKU_TEST_EXECUTABLE: ${{ github.workspace }}/examples/electron-app/dist/Goku Capture Test-win32-x64/Goku Capture Test/Goku Capture Test.exe
+        run: npm test
       - name: Zip the app
         working-directory: examples/electron-app/dist
         run: Compress-Archive -Path "Goku Capture Test-win32-x64" -DestinationPath "$env:GITHUB_WORKSPACE/Goku-Capture-Test-windows-x64.zip"

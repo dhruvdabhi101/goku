@@ -1,6 +1,5 @@
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { downloadArtifact } = require('@electron/get');
 const root = path.resolve(__dirname, '../..');
@@ -16,7 +15,9 @@ async function build() {
   execFileSync('cargo', ['build', '-p', 'goku-node'], { cwd: root, stdio: 'inherit' });
   fs.copyFileSync(path.join(root, 'target/debug', target.library), path.join(__dirname, 'goku.node'));
   const archive = await downloadArtifact({ version: require('./package.json').devDependencies.electron, platform: process.platform, arch: process.arch, artifactName: 'electron' });
-  const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'goku-bundle-'));
+  const dist = path.join(__dirname, 'dist');
+  fs.mkdirSync(dist, { recursive: true });
+  const staging = fs.mkdtempSync(path.join(dist, '.goku-bundle-'));
   try {
     const bundle = process.platform === 'darwin' ? buildMacBundle(archive, staging) : buildWindowsFolder(archive, staging);
     copyAppFiles(process.platform === 'darwin' ? path.join(bundle, 'Contents/Resources/app') : path.join(bundle, 'resources/app'));

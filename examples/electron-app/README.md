@@ -1,6 +1,6 @@
 # Goku Capture Test
 
-This macOS test app loads the Rust SDK through a native Node-API addon in a worker thread in the Electron process. It runs no server and does not start recording on launch.
+This macOS arm64 and Windows x64 test app loads the Rust SDK through a native Node-API addon in a worker thread in the Electron process. It runs no server and does not start recording on launch.
 
 Build with Node on your PATH and run `npm install && npm run build`. The bundle is created under `dist/`. It is ad-hoc signed for local testing, not notarized for distribution.
 
@@ -8,4 +8,6 @@ Open the installed app and inspect Permissions. Request each permission explicit
 
 The test app uses accessibility plus OCR on each capture and the SDK's default pixel-redaction policy. Secret detection remains best effort. Use synthetic secrets only. Images and SQLite data stay in the app's Application Support directory; Open data folder shows the location.
 
-This is a macOS development tester. It does not establish Windows runtime support or complete SDK verification. macOS grants attach to the installed application's identity; rebuilding an ad-hoc-signed app may require renewed permission grants.
+On Windows, extract the entire download ZIP and open `Goku Capture Test.exe` inside its app folder. Keep the EXE with its DLLs and resources. The build is unsigned and intended for testing in a VM. Windows may show a SmartScreen warning. A packaged-app smoke test checks startup and the native addon, not live screen capture.
+
+This is a development tester, not complete SDK verification. macOS grants attach to the installed application's identity; rebuilding an ad-hoc-signed app may require renewed permission grants.
