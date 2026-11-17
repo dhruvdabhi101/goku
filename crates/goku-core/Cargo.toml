@@ -7,6 +7,10 @@ publish.workspace = true
 rust-version.workspace = true
 description = "In-process focused-app capture SDK"
 
+[[bench]]
+name = "capture"
+harness = false
+
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 regex = "1"

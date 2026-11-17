@@ -1,5 +1,5 @@
 use image::codecs::jpeg::JpegEncoder;
-use image::ExtendedColorType;
+use image::{ImageBuffer, Rgba};
 
 use crate::error::RecorderError;
 use crate::types::{OnUnmappable, PixelPolicy, PixelRect, SecretHit};
@@ -122,14 +122,11 @@ pub fn encode_jpeg(image: &PersistableImage, quality: u8) -> Result<Vec<u8>, Rec
         return Err(RecorderError::config("jpeg quality must be 1-100"));
     }
     let mut out = Vec::new();
-    let rgb: Vec<u8> = image
-        .rgba()
-        .chunks_exact(4)
-        .flat_map(|px| px[..3].iter().copied())
-        .collect();
+    let pixels = ImageBuffer::<Rgba<u8>, _>::from_raw(image.width(), image.height(), image.rgba())
+        .ok_or_else(|| RecorderError::capture("rgba length does not match dimensions"))?;
     let mut encoder = JpegEncoder::new_with_quality(&mut out, quality);
     encoder
-        .encode(&rgb, image.width(), image.height(), ExtendedColorType::Rgb8)
+        .encode_image(&pixels)
         .map_err(|e| RecorderError::capture(e.to_string()))?;
     Ok(out)
 }
@@ -227,5 +224,38 @@ mod tests {
         let raw = solid(1, 1, [4, 5, 6, 255]);
         let img = prepare_image(raw, &[], &[], PixelPolicy::Off).unwrap();
         assert!(matches!(img, PersistableImage::ExplicitlyUnredacted(_)));
+    }
+
+    #[test]
+    fn borrowed_rgba_encoding_matches_rgb_for_color_alpha_and_odd_dimensions() {
+        for (width, height) in [(1, 1), (17, 9), (64, 33)] {
+            let rgba = (0..width * height)
+                .flat_map(|i| [(i * 17) as u8, (i * 31) as u8, (i * 7) as u8, i as u8])
+                .collect();
+            let raw = RawImage::new(width, height, rgba).unwrap();
+            let image = prepare_image(
+                raw,
+                &[],
+                &[],
+                PixelPolicy::SecretRegions {
+                    on_unmappable: OnUnmappable::WithholdImage,
+                },
+            )
+            .unwrap();
+            let rgb: Vec<u8> = image
+                .rgba()
+                .chunks_exact(4)
+                .flat_map(|px| px[..3].iter().copied())
+                .collect();
+            for quality in [1, 80, 100] {
+                let mut expected = Vec::new();
+                JpegEncoder::new_with_quality(&mut expected, quality)
+                    .encode(&rgb, width, height, image::ExtendedColorType::Rgb8)
+                    .unwrap();
+                assert_eq!(encode_jpeg(&image, quality).unwrap(), expected);
+            }
+            assert!(encode_jpeg(&image, 0).is_err());
+            assert!(encode_jpeg(&image, 101).is_err());
+        }
     }
 }

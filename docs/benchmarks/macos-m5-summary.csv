@@ -1,0 +1,7 @@
+size,variant,runs,median_ms_per_frame,min_ms,max_ms,jpeg_share_percent
+1280x720,copied_rgb,6,5.808,5.615,7.678,97.9
+1280x720,current,6,4.365,4.287,4.841,97.2
+1920x1080,copied_rgb,6,13.359,13.174,13.464,98.4
+1920x1080,current,6,9.652,9.537,9.726,98.0
+3840x2160,copied_rgb,6,53.473,52.808,54.512,98.8
+3840x2160,current,6,38.184,37.997,42.021,98.4

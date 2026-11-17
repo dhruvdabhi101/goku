@@ -12,8 +12,8 @@ async function build() {
   const key = `${process.platform}-${process.arch}`;
   const target = targets[key];
   if (!target) throw new Error(`This build script targets Apple Silicon macOS and Windows x64, not ${key}`);
-  execFileSync('cargo', ['build', '-p', 'goku-node'], { cwd: root, stdio: 'inherit' });
-  fs.copyFileSync(path.join(root, 'target/debug', target.library), path.join(__dirname, 'goku.node'));
+  execFileSync('cargo', ['build', '--release', '-p', 'goku-node'], { cwd: root, stdio: 'inherit' });
+  fs.copyFileSync(path.join(root, 'target/release', target.library), path.join(__dirname, 'goku.node'));
   const archive = await downloadArtifact({ version: require('./package.json').devDependencies.electron, platform: process.platform, arch: process.arch, artifactName: 'electron' });
   const dist = path.join(__dirname, 'dist');
   fs.mkdirSync(dist, { recursive: true });

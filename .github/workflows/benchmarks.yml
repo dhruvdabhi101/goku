@@ -1,0 +1,40 @@
+name: core benchmarks
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Record build and host information
+        shell: bash
+        run: |
+          git rev-parse HEAD > host.txt
+          rustc -Vv >> host.txt
+          python -c "import os, platform; print(platform.platform()); print('cpus', os.cpu_count())" >> host.txt
+      - name: Compare copied RGB and borrowed RGBA in release mode
+        shell: bash
+        run: |
+          cargo bench -p goku-core --bench capture -- 6 > benchmark.csv
+          python scripts/benchmark-summary.py benchmark.csv | tee summary.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-benchmark-${{ matrix.os }}
+          path: |
+            benchmark.csv
+            summary.csv
+            host.txt
