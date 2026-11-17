@@ -1,19 +1,26 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{self, Sender};
+use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use windows::core::{Interface, BOOL};
 use windows::Foundation::IMemoryBufferReference;
-use windows::Graphics::Capture::{
-    Direct3D11CaptureFramePool, GraphicsCaptureItem, GraphicsCaptureSession,
-};
+use windows::Graphics::Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem};
+use windows::Graphics::DirectX::Direct3D11::IDirect3DDevice;
 use windows::Graphics::DirectX::DirectXPixelFormat;
 use windows::Graphics::Imaging::{
     BitmapAlphaMode, BitmapBufferAccessMode, BitmapPixelFormat, SoftwareBitmap,
 };
 use windows::Media::Ocr::OcrEngine;
-use windows::Win32::Foundation::{BOOL, HANDLE, HWND, LPARAM, RECT, WPARAM};
+use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, RECT, WPARAM};
+use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
+use windows::Win32::Graphics::Direct3D11::{
+    D3D11CreateDevice, ID3D11Device, ID3D11Texture2D, D3D11_CPU_ACCESS_READ,
+    D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_SDK_VERSION,
+    D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
+};
+use windows::Win32::Graphics::Dxgi::IDXGIDevice;
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, HMONITOR, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
@@ -25,16 +32,18 @@ use windows::Win32::System::Threading::{
     GetCurrentThreadId, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
     PROCESS_QUERY_LIMITED_INFORMATION,
 };
+use windows::Win32::System::WinRT::Direct3D11::{
+    CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess,
+};
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
 use windows::Win32::System::WinRT::{
     IMemoryBufferByteAccess, RoInitialize, RO_INIT_SINGLETHREADED,
 };
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationCacheRequest, IUIAutomationElement,
-    IUIAutomationTreeWalker, IUIAutomationValuePattern, TreeScope_Children, TreeScope_Element,
-    UIA_BoundingRectanglePropertyId, UIA_ControlTypePropertyId, UIA_DocumentControlTypeId,
-    UIA_EditControlTypeId, UIA_HyperlinkControlTypeId, UIA_IsPasswordPropertyId,
-    UIA_NamePropertyId, UIA_ValuePatternId, UIA_ValueValuePropertyId,
+    IUIAutomationTreeWalker, IUIAutomationValuePattern, TreeScope, TreeScope_Children,
+    TreeScope_Element, UIA_BoundingRectanglePropertyId, UIA_ControlTypePropertyId,
+    UIA_IsPasswordPropertyId, UIA_NamePropertyId, UIA_ValuePatternId, UIA_ValueValuePropertyId,
 };
 use windows::Win32::UI::HiDpi::{
     GetDpiForWindow, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
@@ -163,23 +172,24 @@ impl Platform for WinPlatform {
         focus: &FocusSnapshot,
         budget: WalkBudget,
     ) -> Result<AxSnapshot, RecorderError> {
-        let hwnd = hwnd_from(focus.identity.window_id)?;
+        hwnd_from(focus.identity.window_id)?;
+        let window_id = focus.identity.window_id;
+        let timeout = Duration::from_millis(budget.timeout_ms.max(AX_TIME_CAP.as_millis() as u64));
         let (tx, rx) = mpsc::channel();
         let worker = thread::Builder::new()
             .name("goku-uia".into())
-            .spawn(move || tx.send(walk_window(hwnd, budget)).ok())
+            .spawn(move || {
+                let result = hwnd_from(window_id).and_then(|hwnd| walk_window(hwnd, budget));
+                tx.send(result).ok()
+            })
             .map_err(|err| RecorderError::AxFailed(err.to_string()))?;
-        let result = rx
-            .recv_timeout(Duration::from_millis(
-                budget.timeout_ms.max(AX_TIME_CAP.as_millis() as u64),
-            ))
-            .unwrap_or(Ok(AxSnapshot {
-                segments: Vec::new(),
-                browser_url: None,
-                document_path: None,
-                truncated: true,
-                node_count: 0,
-            }));
+        let result = rx.recv_timeout(timeout).unwrap_or(Ok(AxSnapshot {
+            segments: Vec::new(),
+            browser_url: None,
+            document_path: None,
+            truncated: true,
+            node_count: 0,
+        }));
         let _ = worker.join();
         result
     }
@@ -324,7 +334,7 @@ fn capture_one(
     if size.Width <= 0 || size.Height <= 0 {
         return Err(RecorderError::capture("capture item has no pixels"));
     }
-    let device = capture_device()?;
+    let (d3d, device) = capture_device()?;
     let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
         &device,
         DirectXPixelFormat::B8G8R8A8UIntNormalized,
@@ -345,10 +355,11 @@ fn capture_one(
         .StartCapture()
         .map_err(|err| RecorderError::capture(err.to_string()))?;
     let frame = next_frame(&pool)?;
-    let image = frame_to_rgba(&frame)?;
+    let image = frame_to_rgba(&d3d, &frame);
     let _ = frame.Close();
     let _ = session.Close();
     let _ = pool.Close();
+    let image = image?;
     if scope == CaptureScope::DisplayCrop {
         crop_to_window(image, focus)
     } else {
@@ -375,11 +386,30 @@ fn capture_item_for_monitor(hwnd: HWND) -> Result<GraphicsCaptureItem, RecorderE
         .map_err(|err| RecorderError::capture(err.to_string()))
 }
 
-fn capture_device() -> Result<windows::Graphics::DirectX::Direct3D11::IDirect3DDevice, RecorderError>
-{
-    Err(RecorderError::capture(
-        "Graphics_DirectX_Direct3D11, Win32_Graphics_Direct3D11, Win32_Graphics_Dxgi, and Win32_System_WinRT_Direct3D11 are not enabled",
-    ))
+fn capture_device() -> Result<(ID3D11Device, IDirect3DDevice), RecorderError> {
+    let fail = |err: windows::core::Error| RecorderError::capture(err.to_string());
+    let mut d3d = None;
+    unsafe {
+        D3D11CreateDevice(
+            None,
+            D3D_DRIVER_TYPE_HARDWARE,
+            Default::default(),
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+            None,
+            D3D11_SDK_VERSION,
+            Some(&mut d3d),
+            None,
+            None,
+        )
+    }
+    .map_err(fail)?;
+    let d3d: ID3D11Device =
+        d3d.ok_or_else(|| RecorderError::capture("Direct3D 11 device is unavailable"))?;
+    let dxgi: IDXGIDevice = d3d.cast().map_err(fail)?;
+    let device = unsafe { CreateDirect3D11DeviceFromDXGIDevice(&dxgi) }
+        .and_then(|inspectable| inspectable.cast::<IDirect3DDevice>())
+        .map_err(fail)?;
+    Ok((d3d, device))
 }
 
 fn next_frame(
@@ -396,12 +426,44 @@ fn next_frame(
 }
 
 fn frame_to_rgba(
+    d3d: &ID3D11Device,
     frame: &windows::Graphics::Capture::Direct3D11CaptureFrame,
 ) -> Result<RawImage, RecorderError> {
-    let _ = frame;
-    Err(RecorderError::capture(
-        "Graphics_DirectX_Direct3D11 is required to read a Graphics Capture frame",
-    ))
+    let fail = |err: windows::core::Error| RecorderError::capture(err.to_string());
+    let access: IDirect3DDxgiInterfaceAccess = frame
+        .Surface()
+        .and_then(|surface| surface.cast())
+        .map_err(fail)?;
+    let texture: ID3D11Texture2D = unsafe { access.GetInterface() }.map_err(fail)?;
+    let mut desc = D3D11_TEXTURE2D_DESC::default();
+    unsafe { texture.GetDesc(&mut desc) };
+    desc.Usage = D3D11_USAGE_STAGING;
+    desc.BindFlags = 0;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ.0 as u32;
+    desc.MiscFlags = 0;
+    let mut staging = None;
+    unsafe { d3d.CreateTexture2D(&desc, None, Some(&mut staging)) }.map_err(fail)?;
+    let staging =
+        staging.ok_or_else(|| RecorderError::capture("staging texture is unavailable"))?;
+    let context = unsafe { d3d.GetImmediateContext() }.map_err(fail)?;
+    unsafe { context.CopyResource(&staging, &texture) };
+    let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+    unsafe { context.Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped)) }.map_err(fail)?;
+    let width = desc.Width as usize;
+    let height = desc.Height as usize;
+    let pitch = mapped.RowPitch as usize;
+    let mut rgba = Vec::with_capacity(width * height * 4);
+    if !mapped.pData.is_null() && pitch >= width * 4 {
+        let source =
+            unsafe { std::slice::from_raw_parts(mapped.pData as *const u8, pitch * height) };
+        for row in source.chunks_exact(pitch) {
+            for bgra in row[..width * 4].chunks_exact(4) {
+                rgba.extend_from_slice(&[bgra[2], bgra[1], bgra[0], 255]);
+            }
+        }
+    }
+    unsafe { context.Unmap(&staging, 0) };
+    RawImage::new(desc.Width, desc.Height, rgba)
 }
 
 fn crop_to_window(image: RawImage, focus: &FocusSnapshot) -> Result<RawImage, RecorderError> {
@@ -471,7 +533,7 @@ fn walk_window_com(hwnd: HWND, budget: WalkBudget) -> Result<AxSnapshot, Recorde
             .map_err(|err| RecorderError::AxFailed(err.to_string()))?;
     }
     unsafe { cache.AddPattern(UIA_ValuePatternId) }.ok();
-    unsafe { cache.SetTreeScope(TreeScope_Element | TreeScope_Children) }.ok();
+    unsafe { cache.SetTreeScope(TreeScope(TreeScope_Element.0 | TreeScope_Children.0)) }.ok();
     let walker = unsafe { automation.ControlViewWalker() }
         .map_err(|err| RecorderError::AxFailed(err.to_string()))?;
     let deadline = Instant::now() + AX_TIME_CAP.min(Duration::from_millis(budget.timeout_ms));
@@ -661,7 +723,7 @@ fn recognize(image: &RawImage) -> Result<OcrSnapshot, RecorderError> {
         .RecognizeAsync(&bitmap)
         .map_err(|err| RecorderError::OcrFailed(err.to_string()))?;
     let result = op
-        .get()
+        .join()
         .map_err(|err| RecorderError::OcrFailed(format!("language missing or {err}")))?;
     let lines = result
         .Lines()

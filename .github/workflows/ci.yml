@@ -23,7 +23,7 @@ jobs:
         run: scripts/check-architecture.sh
 
   macos:
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -40,7 +40,7 @@ jobs:
       - run: cargo test -p goku-core
 
   electron-app:
-    runs-on: macos-14
+    runs-on: macos-latest
     needs: macos
     steps:
       - uses: actions/checkout@v4

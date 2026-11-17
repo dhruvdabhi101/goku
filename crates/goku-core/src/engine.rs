@@ -272,7 +272,7 @@ impl Recorder {
     pub fn request_permission(&self, kind: PermissionKind) -> Result<(), RecorderError> {
         self.platform_call(
             |platform| platform.request(kind),
-            |tx, reply| Command::Request { kind, reply },
+            |_tx, reply| Command::Request { kind, reply },
         )
     }
 
@@ -1378,7 +1378,7 @@ mod tests {
     fn thin_accessibility_text_falls_back_to_ocr() {
         let (_path, config) = temp_config();
         let store = Store::open(config.data_dir.clone()).unwrap();
-        let mut platform =
+        let platform =
             FakePlatform::stable(focus(1, "Notes", "a"), ax(vec![seg("ok", Some(box_at()))]));
         *platform.ocr.lock().unwrap() = Ok(OcrSnapshot {
             segments: vec![TextSegment {
