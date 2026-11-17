@@ -1,0 +1,11 @@
+Worktree baseline: 7661f6f20713cffc4f38b931d59dcda3088e74e2
+Candidate implementation committed as: ebd10b5
+CPU: Apple M5
+Logical CPUs: 10
+Memory bytes: 25769803776
+rustc: 1.96.0 (ac68faa20 2026-05-25)
+Profile: release, default Cargo optimizations
+Load averages observed before measurement: 2.17 2.57 2.98
+Fixture: synthetic colored desktop-like image, not a live capture
+Rounds: six alternating samples per implementation and size, three frames per sample
+Separate unreported CPU sample: JPEG encoder and forward DCT stacks dominated

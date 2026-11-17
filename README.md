@@ -35,8 +35,18 @@ event (app switch / click / typing pause / scroll stop / idle / manual)
 
 ## Status
 
-A local macOS permission and capture tester is available in [examples/electron-app](examples/electron-app/README.md). It uses the Rust SDK through a native Node addon, starts idle, and exposes permission status, requests, settings shortcuts, session controls, and recent frames. Its presence does not establish Windows support or release readiness.
+A macOS arm64 and Windows x64 permission and capture tester is available in [examples/electron-app](examples/electron-app/README.md). It uses the Rust SDK through a native Node addon, starts idle, and exposes permission status, requests, settings shortcuts, session controls, and recent frames. Its presence does not establish low-spec performance or release readiness. Windows redaction coordinates and native timeout handling still need fixes and VM validation. Use synthetic test data rather than sensitive workloads.
 
 Decisions in the product plan are locked, except the SDK license. Implementation is in progress for macOS 14+ and Windows 10 1903+ / Windows 11. Linux is not a target.
 
 `focusedApp` (display capture that includes only the focused application's windows) exists on macOS. Windows Graphics Capture has no equivalent filter, so Windows uses window capture for that setting and says so in the status.
+
+## Install the experimental Node SDK
+
+```sh
+npm install https://github.com/dhruvdabhi101/goku/releases/download/sdk-v0.1.0/goku-capture-sdk-0.1.0.tgz
+```
+
+The archive includes prebuilt release binaries for macOS arm64 and Windows x64. It needs Node 20 or newer, not Rust or Electron. It runs no install scripts and never starts recording on import. Import `NativeRecorder` from `goku-capture-sdk`; see [the Node SDK guide](bindings/node/README.md) for the API and host permission requirements.
+
+This is a public archive, not an npm registry publication. The project remains `UNLICENSED` until the owner chooses a license. The [performance report](docs/performance.md) records measured improvements, runner benchmarks, and the remaining low-spec validation work.

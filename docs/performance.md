@@ -20,7 +20,18 @@ Six alternating samples per variant ran on an Apple M5 with 24 GiB RAM and 10 lo
 
 The measured CPU-only path is 25 to 29 percent faster on these fixtures. JPEG accounts for 97 to 99 percent of that path, so reducing text work cannot double its throughput. A separate, unreported two-second `sample` run showed stacks in JPEG encoding and its forward discrete cosine transform. It did not measure live capture.
 
-Raw measurements are in [macos-m5-core.csv](benchmarks/macos-m5-core.csv). The pre-change implementation is retained as `copied_rgb` in the benchmark, so both implementations run in one process with identical inputs. Tests also compare colored, variable-alpha, odd-sized images at qualities 1, 80, and 100.
+Raw measurements are in [macos-m5-core.csv](benchmarks/macos-m5-core.csv), with [host details](benchmarks/macos-m5-host.txt). The pre-change implementation is retained as `copied_rgb` in the benchmark, so both implementations run in one process with identical inputs. Tests also compare colored, variable-alpha, odd-sized images at qualities 1, 80, and 100. `prepare_ms` includes cloning the fixture as well as painting, so it is not an isolated paint timer.
+
+## Hosted-runner results
+
+The [benchmark run](https://github.com/dhruvdabhi101/goku/actions/runs/44085318218) passed on both hosted platforms at revision `9b66255`. The same six alternating samples and three-frame batches ran on each host.
+
+| Host and 1080p fixture | Old median per frame | Borrowed RGBA median | Old range | New range |
+| --- | --- | --- | --- | --- |
+| Windows Server runner, 4 logical CPUs | 51.703 ms | 41.090 ms | 51.570 to 53.272 ms | 41.012 to 42.863 ms |
+| macOS arm64 runner, 5 logical CPUs | 26.652 ms | 18.371 ms | 23.612 to 30.463 ms | 16.855 to 19.161 ms |
+
+The 1080p CPU-only reduction is 20.5 percent on this Windows runner and 31.1 percent on this macOS runner. Do not compare absolute speeds between these unrelated hosts. Raw data and toolchain details are in [windows-runner](benchmarks/windows-runner/) and [macos-runner](benchmarks/macos-runner/). The SDK package also passed [archive installation on both platforms](https://github.com/dhruvdabhi101/goku/actions/runs/44085323260).
 
 ## Avoidable costs removed from distribution
 

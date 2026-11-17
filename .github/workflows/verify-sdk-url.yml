@@ -1,0 +1,42 @@
+name: Verify public SDK install
+
+on:
+  workflow_dispatch:
+    inputs:
+      archive_url:
+        description: Public SDK release archive
+        type: string
+        default: https://github.com/dhruvdabhi101/goku/releases/download/sdk-v0.1.0/goku-capture-sdk-0.1.0.tgz
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+        node: [20, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install public archive and load SDK
+        shell: bash
+        env:
+          SDK_ARCHIVE_URL: ${{ inputs.archive_url }}
+        run: |
+          case "$SDK_ARCHIVE_URL" in
+            https://github.com/dhruvdabhi101/goku/releases/download/*/*.tgz) ;;
+            *) echo 'Expected a Goku GitHub Release tarball URL'; exit 1 ;;
+          esac
+          mkdir installed-sdk
+          cd installed-sdk
+          npm init -y
+          npm install --ignore-scripts "$SDK_ARCHIVE_URL"
+          cd ..
+          node scripts/test-node-package.cjs installed-sdk

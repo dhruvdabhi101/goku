@@ -1,6 +1,10 @@
 # Install the Node SDK
 
-The SDK archive contains optimized native binaries for macOS arm64 and Windows x64. It does not include Electron. Install a release `.tgz` URL with `npm install <archive-url>`. Installation needs no Rust compiler and runs no install scripts. The current package name is `goku-capture-sdk`; it is not published to the npm registry.
+The SDK archive contains optimized native binaries for macOS arm64 and Windows x64. It does not include Electron. Installation needs no Rust compiler and runs no install scripts. The current package name is `goku-capture-sdk`; it is not published to the npm registry.
+
+```sh
+npm install https://github.com/dhruvdabhi101/goku/releases/download/sdk-v0.1.0/goku-capture-sdk-0.1.0.tgz
+```
 
 `NativeRecorder` wraps the Rust recorder. The Electron tester calls it on a Node worker thread, so synchronous native operations do not block the main UI thread.
 
