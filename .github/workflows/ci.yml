@@ -46,6 +46,29 @@ jobs:
           path: target/release/goku-cli.exe
           retention-days: 14
 
+  electron-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: examples/electron-app/package-lock.json
+      - name: Build the Windows app folder
+        working-directory: examples/electron-app
+        run: npm ci && npm run build
+      - name: Zip the app
+        working-directory: examples/electron-app/dist
+        run: Compress-Archive -Path "Goku Capture Test-win32-x64" -DestinationPath "$env:GITHUB_WORKSPACE/Goku-Capture-Test-windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Goku-Capture-Test-windows-x64
+          path: Goku-Capture-Test-windows-x64.zip
+          retention-days: 90
+
   electron-app:
     runs-on: macos-latest
     needs: macos
