@@ -1,0 +1,86 @@
+name: Node SDK package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: darwin-arm64
+            library: libgoku_node.dylib
+          - os: windows-latest
+            target: win32-x64
+            library: goku_node.dll
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build release addon
+        run: cargo build --locked --release -p goku-node
+      - name: Stage binary
+        shell: bash
+        run: |
+          mkdir -p bindings/node/native
+          cp target/release/${{ matrix.library }} bindings/node/native/${{ matrix.target }}.node
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goku-native-${{ matrix.target }}
+          path: bindings/node/native/*.node
+
+  pack:
+    needs: native
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: goku-native-*
+          merge-multiple: true
+          path: bindings/node/native
+      - name: Pack both platform binaries
+        working-directory: bindings/node
+        run: |
+          test -s native/darwin-arm64.node
+          test -s native/win32-x64.node
+          npm pack --ignore-scripts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goku-node-package
+          path: bindings/node/*.tgz
+
+  install:
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: goku-node-package
+          path: package-artifact
+      - name: Install the archive without build scripts
+        shell: bash
+        run: |
+          mkdir installed-sdk
+          cd installed-sdk
+          npm init -y
+          npm install --ignore-scripts ../package-artifact/*.tgz
+          cd ..
+          node scripts/test-node-package.cjs installed-sdk

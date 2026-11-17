@@ -1,0 +1,13 @@
+{
+  "name": "goku-capture-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "In-process focused-app capture SDK for macOS and Windows",
+  "license": "UNLICENSED",
+  "main": "index.cjs",
+  "engines": { "node": ">=20" },
+  "os": ["darwin", "win32"],
+  "cpu": ["arm64", "x64"],
+  "files": ["index.cjs", "native/*.node", "README.md"],
+  "repository": { "type": "git", "url": "git+https://github.com/dhruvdabhi101/goku.git", "directory": "bindings/node" }
+}
