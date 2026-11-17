@@ -6,4 +6,4 @@ members = ["crates/goku-core", "examples/goku-cli", "bindings/node"]
 edition = "2021"
 license = "UNLICENSED"
 publish = false
-rust-version = "1.82"
+rust-version = "1.89"

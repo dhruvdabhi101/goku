@@ -558,55 +558,8 @@ fn lock_data_dir(dir: &Path) -> Result<File, RecorderError> {
         .write(true)
         .open(&path)
         .map_err(io_err)?;
-    lock_exclusive(&file)?;
+    file.lock().map_err(io_err)?;
     Ok(file)
-}
-
-#[cfg(unix)]
-fn lock_exclusive(file: &File) -> Result<(), RecorderError> {
-    use std::os::unix::io::AsRawFd;
-    const LOCK_EX: i32 = 2;
-    let rc = unsafe { flock(file.as_raw_fd(), LOCK_EX) };
-    if rc != 0 {
-        return Err(io_err(std::io::Error::last_os_error()));
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-extern "C" {
-    fn flock(fd: i32, operation: i32) -> i32;
-}
-
-#[cfg(windows)]
-fn lock_exclusive(file: &File) -> Result<(), RecorderError> {
-    use std::os::windows::io::AsRawHandle;
-    let rc = unsafe {
-        LockFileEx(
-            file.as_raw_handle(),
-            2,
-            0,
-            u32::MAX,
-            u32::MAX,
-            std::ptr::null_mut(),
-        )
-    };
-    if rc == 0 {
-        return Err(io_err(std::io::Error::last_os_error()));
-    }
-    Ok(())
-}
-
-#[cfg(windows)]
-extern "system" {
-    fn LockFileEx(
-        file: *mut std::ffi::c_void,
-        flags: u32,
-        reserved: u32,
-        bytes_low: u32,
-        bytes_high: u32,
-        overlapped: *mut std::ffi::c_void,
-    ) -> i32;
 }
 
 fn wipe_tmp(dir: &Path) -> Result<(), RecorderError> {
