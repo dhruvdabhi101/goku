@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  architecture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check module boundaries and change size
+        env:
+          GOKU_BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || '' }}
+          GOKU_ALLOW_WIDE_CHANGE: ${{ contains(github.event.pull_request.labels.*.name, 'wide-change') && '1' || '0' }}
+        run: scripts/check-architecture.sh
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace
+      - run: cargo run -p goku-cli -- doctor
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p goku-core
+
+  electron-app:
+    runs-on: macos-14
+    needs: macos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: examples/electron-app/package-lock.json
+      - name: Build the app bundle
+        working-directory: examples/electron-app
+        run: npm ci && npm run build
+      - name: Smoke test the packaged app
+        working-directory: examples/electron-app
+        run: npm test
+      - name: Zip the app
+        working-directory: examples/electron-app/dist/Goku Capture Test-darwin-arm64
+        run: ditto -c -k --keepParent "Goku Capture Test.app" "$GITHUB_WORKSPACE/Goku-Capture-Test-macos-arm64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Goku-Capture-Test-macos-arm64
+          path: Goku-Capture-Test-macos-arm64.zip
+          retention-days: 14

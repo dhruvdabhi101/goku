@@ -1,0 +1,7 @@
+/target
+**/node_modules
+**/*.node
+**/dist
+**/.DS_Store
+*.log
+.audit/

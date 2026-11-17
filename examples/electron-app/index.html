@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'">
+  <title>Goku Capture Test</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header><div><span class="eyebrow">LOCAL SDK TESTER</span><h1>Goku Capture</h1><p>Permission checks and focused-app snapshots. Nothing leaves this Mac.</p></div><span id="state" class="badge">Checking</span></header>
+  <main>
+    <section aria-labelledby="permissions-title"><div class="section-heading"><h2 id="permissions-title">Permissions</h2><button id="refresh">Refresh</button></div><p>These are the native SDK's current readings for this installed app. A grant may require quitting and reopening.</p><div id="permissions" class="permissions"></div><button id="relaunch">Quit and reopen</button></section>
+    <section aria-labelledby="session-title"><h2 id="session-title">Capture session</h2><p>Start explicitly, then switch to TextEdit or another safe app. Goku's own windows are excluded. Stop ends recording.</p><div class="actions"><button id="start" class="primary">Start session</button><button id="capture" disabled>Capture in 5 seconds</button><button id="pause" disabled>Pause</button><button id="resume" disabled>Resume</button><button id="stop" disabled>Stop</button><button id="data">Open data folder</button></div><p class="caution">Experimental build. Text and images use best-effort secret redaction, with OCR on every capture. Do not test with real credentials. This is not a guarantee that every secret is detected.</p></section>
+    <div id="notice" role="status" aria-live="polite">No recording starts automatically.</div>
+    <section aria-labelledby="frames-title"><div class="section-heading"><h2 id="frames-title">Recent frames</h2><span id="count">0 frames</span></div><div id="frames"><p>No frames yet.</p></div></section>
+    <section id="detail" hidden><h2>Selected frame</h2><p id="metadata"></p><img id="preview" alt="Selected redacted capture" hidden><pre id="text"></pre></section>
+  </main>
+  <footer>macOS test build · Native Rust SDK in the Electron process · No server</footer>
+  <script src="renderer.js"></script>
+</body>
+</html>

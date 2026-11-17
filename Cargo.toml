@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["crates/goku-core", "examples/goku-cli", "bindings/node"]
+
+[workspace.package]
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+rust-version = "1.82"
