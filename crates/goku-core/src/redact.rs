@@ -48,7 +48,8 @@ struct Detector {
     keyword: Regex,
 }
 
-static DETECTOR: LazyLock<Detector> = LazyLock::new(|| Detector {
+static DETECTOR: LazyLock<Detector> = LazyLock::new(|| {
+    Detector {
     pem: Regex::new(
         r"(?s)-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----.*?-----END (?:[A-Z0-9]+ )?PRIVATE KEY-----",
     )
@@ -91,6 +92,7 @@ static DETECTOR: LazyLock<Detector> = LazyLock::new(|| Detector {
         r"(?i)\b(?:password|secret|token|api[_-]?key|credential|bearer|passwd|private[_-]?key)\b",
     )
     .expect("keyword"),
+}
 });
 
 fn collect_spans(input: &str) -> Vec<Span> {
@@ -115,11 +117,7 @@ fn push_matches(re: &Regex, input: &str, label: &'static str, rank: u8, out: &mu
         if label == "OPENAI_KEY" && found.as_str().starts_with("sk-ant-") {
             continue;
         }
-        let alphabet = if label == "JWT" {
-            b64_byte
-        } else {
-            key_byte
-        };
+        let alphabet = if label == "JWT" { b64_byte } else { key_byte };
         if !edge_ok(input, found.start(), found.end(), alphabet) {
             continue;
         }
@@ -168,14 +166,7 @@ fn push_userinfo(input: &str, out: &mut Vec<Span>) {
     }
 }
 
-const QUERY_NAMES: &[&str] = &[
-    "access_token",
-    "api_key",
-    "token",
-    "secret",
-    "sig",
-    "key",
-];
+const QUERY_NAMES: &[&str] = &["access_token", "api_key", "token", "secret", "sig", "key"];
 
 fn push_queries(input: &str, out: &mut Vec<Span>) {
     let lower = input.to_ascii_lowercase();
@@ -285,7 +276,9 @@ fn assignment_value(input: &str, mut i: usize) -> Option<(usize, usize)> {
     let quote = bytes.get(i).copied();
     if quote == Some(b'"') || quote == Some(b'\'') {
         let start = i + 1;
-        let end = input[start..].find(quote.unwrap() as char).map(|n| start + n)?;
+        let end = input[start..]
+            .find(quote.unwrap() as char)
+            .map(|n| start + n)?;
         if end == start {
             return None;
         }
@@ -309,7 +302,8 @@ fn is_value_end(b: u8) -> bool {
 fn push_entropy(input: &str, out: &mut Vec<Span>) {
     for found in DETECTOR.entropy.find_iter(input) {
         let token = found.as_str();
-        if !edge_ok(input, found.start(), found.end(), entropy_byte) || token.len() < 20
+        if !edge_ok(input, found.start(), found.end(), entropy_byte)
+            || token.len() < 20
             || allowlisted(token)
             || is_uuid(token)
             || is_git_sha(token)
@@ -458,7 +452,10 @@ fn resolve(mut spans: Vec<Span>) -> Vec<Span> {
         if span.start >= span.end {
             continue;
         }
-        if taken.iter().any(|kept: &Span| kept.start < span.end && span.start < kept.end) {
+        if taken
+            .iter()
+            .any(|kept: &Span| kept.start < span.end && span.start < kept.end)
+        {
             continue;
         }
         taken.push(span);
@@ -498,9 +495,10 @@ mod tests {
             redacted.text
         );
         assert!(
-            redacted.hits.iter().any(|hit| {
-                hit.label == label && input.get(hit.start..hit.end) == Some(secret)
-            }),
+            redacted
+                .hits
+                .iter()
+                .any(|hit| { hit.label == label && input.get(hit.start..hit.end) == Some(secret) }),
             "hit did not point at the input secret"
         );
     }
@@ -583,9 +581,14 @@ mod tests {
         let input = "postgres://ada:s3cret@localhost:5432/db ada@example.com";
         let redacted = redact_text(input);
         assert!(!redacted.text.contains("s3cret"));
-        assert!(redacted.text.contains("postgres://[REDACTED:URL_USERINFO]@localhost:5432/db"));
+        assert!(redacted
+            .text
+            .contains("postgres://[REDACTED:URL_USERINFO]@localhost:5432/db"));
         assert!(redacted.text.contains("ada@example.com"));
-        assert_eq!(&input[redacted.hits[0].start..redacted.hits[0].end], "ada:s3cret");
+        assert_eq!(
+            &input[redacted.hits[0].start..redacted.hits[0].end],
+            "ada:s3cret"
+        );
         let user_only = redact_text("postgres://ada@localhost/db");
         assert_eq!(user_only.text, "postgres://ada@localhost/db");
         assert!(redact_text("https://user:test@example.com/x")
@@ -627,11 +630,7 @@ mod tests {
     #[test]
     fn high_entropy_tokens_need_a_nearby_keyword_and_skip_ids_and_paths() {
         let token = "aB3xQ9mN2pL7vR4tY8wZ";
-        gone(
-            &format!("the api_key is {token}"),
-            token,
-            "HIGH_ENTROPY",
-        );
+        gone(&format!("the api_key is {token}"), token, "HIGH_ENTROPY");
         let far = format!("secret{}{token}", " ".repeat(41));
         assert!(redact_text(&far).text.contains(token));
         let near = format!("secret{}{token}", " ".repeat(34));

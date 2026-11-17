@@ -19,7 +19,9 @@ pub struct CaptureFacts {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FramePlan {
-    Discard { reason: DiscardReason },
+    Discard {
+        reason: DiscardReason,
+    },
     Row {
         text: String,
         labels: Vec<String>,
@@ -67,7 +69,11 @@ pub fn plan_frame(
     }
 }
 
-fn row(facts: &CaptureFacts, image: Option<PersistableImage>, image_status: ImageStatus) -> FramePlan {
+fn row(
+    facts: &CaptureFacts,
+    image: Option<PersistableImage>,
+    image_status: ImageStatus,
+) -> FramePlan {
     FramePlan::Row {
         text: facts.text.clone(),
         labels: facts.labels.clone(),

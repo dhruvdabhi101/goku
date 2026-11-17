@@ -18,9 +18,15 @@ impl RawImage {
             .and_then(|n| n.checked_mul(4))
             .ok_or_else(|| RecorderError::capture("image dimensions overflow"))?;
         if rgba.len() != expected || width == 0 || height == 0 {
-            return Err(RecorderError::capture("rgba length does not match dimensions"));
+            return Err(RecorderError::capture(
+                "rgba length does not match dimensions",
+            ));
         }
-        Ok(Self { rgba, width, height })
+        Ok(Self {
+            rgba,
+            width,
+            height,
+        })
     }
 }
 
@@ -116,15 +122,14 @@ pub fn encode_jpeg(image: &PersistableImage, quality: u8) -> Result<Vec<u8>, Rec
         return Err(RecorderError::config("jpeg quality must be 1-100"));
     }
     let mut out = Vec::new();
-    let rgb: Vec<u8> = image.rgba().chunks_exact(4).flat_map(|px| px[..3].iter().copied()).collect();
+    let rgb: Vec<u8> = image
+        .rgba()
+        .chunks_exact(4)
+        .flat_map(|px| px[..3].iter().copied())
+        .collect();
     let mut encoder = JpegEncoder::new_with_quality(&mut out, quality);
     encoder
-        .encode(
-            &rgb,
-            image.width(),
-            image.height(),
-            ExtendedColorType::Rgb8,
-        )
+        .encode(&rgb, image.width(), image.height(), ExtendedColorType::Rgb8)
         .map_err(|e| RecorderError::capture(e.to_string()))?;
     Ok(out)
 }

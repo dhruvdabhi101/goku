@@ -102,7 +102,14 @@ fn pixel() -> RawImage {
     RawImage::new(1, 1, vec![8, 8, 8, 255]).expect("1x1 rgba")
 }
 
-fn facts_for(focus_changed: bool, pixels_ok: bool, denied: bool, secure_input: bool, permission_missing: bool, hit: Hit) -> CaptureFacts {
+fn facts_for(
+    focus_changed: bool,
+    pixels_ok: bool,
+    denied: bool,
+    secure_input: bool,
+    permission_missing: bool,
+    hit: Hit,
+) -> CaptureFacts {
     CaptureFacts {
         before: identity(1),
         after: identity(if focus_changed { 2 } else { 1 }),
@@ -260,7 +267,10 @@ fn check_ready_image(
 }
 
 fn print_violations(label: &str, found: &[ReadyViolation]) {
-    println!("{label}: checked 768 cases, ready violations: {}", found.len());
+    println!(
+        "{label}: checked 768 cases, ready violations: {}",
+        found.len()
+    );
     for violation in found {
         println!("  {violation}");
     }
@@ -341,7 +351,11 @@ fn plan_frame_without_focus_check(
     }
 }
 
-fn row(facts: &CaptureFacts, image: Option<goku_core::PersistableImage>, image_status: ImageStatus) -> FramePlan {
+fn row(
+    facts: &CaptureFacts,
+    image: Option<goku_core::PersistableImage>,
+    image_status: ImageStatus,
+) -> FramePlan {
     FramePlan::Row {
         text: facts.text.clone(),
         labels: facts.labels.clone(),

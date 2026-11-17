@@ -79,7 +79,8 @@ impl Store {
         let conn = Connection::open(dir.as_path().join("db.sqlite")).map_err(db_err)?;
         conn.busy_timeout(std::time::Duration::from_secs(3))
             .map_err(db_err)?;
-        conn.execute_batch("PRAGMA foreign_keys=ON;").map_err(db_err)?;
+        conn.execute_batch("PRAGMA foreign_keys=ON;")
+            .map_err(db_err)?;
         let _ = conn.query_row("PRAGMA journal_mode=WAL", [], |_| Ok(()));
         conn.execute_batch(SCHEMA).map_err(db_err)?;
         let now = now_ms();
@@ -127,7 +128,8 @@ impl Store {
 
     pub fn retain(&self, max_age_days: u32, max_bytes: u64) -> Result<(), RecorderError> {
         if max_age_days > 0 {
-            let cutoff = now_ms().saturating_sub(i64::from(max_age_days).saturating_mul(86_400_000));
+            let cutoff =
+                now_ms().saturating_sub(i64::from(max_age_days).saturating_mul(86_400_000));
             let old = self.frame_ids("captured_at < ?1", (cutoff,))?;
             for (id, path) in old {
                 self.delete_owned_frame(id, path.as_deref())?;
@@ -164,7 +166,11 @@ impl Store {
         Ok(())
     }
 
-    fn frame_ids(&self, clause: &str, cutoff: (i64,)) -> Result<Vec<(i64, Option<String>)>, RecorderError> {
+    fn frame_ids(
+        &self,
+        clause: &str,
+        cutoff: (i64,),
+    ) -> Result<Vec<(i64, Option<String>)>, RecorderError> {
         let sql = format!("SELECT id, image_path FROM frames WHERE {clause}");
         let mut stmt = self.conn.prepare(&sql).map_err(db_err)?;
         let rows = stmt
@@ -373,11 +379,8 @@ impl ReadStore {
         if !path.is_file() {
             return Err(RecorderError::StoreFailed("no database".into()));
         }
-        let conn = Connection::open_with_flags(
-            &path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .map_err(db_err)?;
+        let conn = Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(db_err)?;
         Ok(Self {
             dir: dir.clone(),
             conn,
@@ -410,7 +413,10 @@ impl ReadStore {
         Ok((count.max(0) as u64, session, trigger))
     }
 
-    pub fn recent(&self, query: &crate::types::RecentFramesQuery) -> Result<Vec<crate::types::FrameSummary>, RecorderError> {
+    pub fn recent(
+        &self,
+        query: &crate::types::RecentFramesQuery,
+    ) -> Result<Vec<crate::types::FrameSummary>, RecorderError> {
         let limit = query.limit.clamp(1, 500);
         let mut sql = String::from(
             "SELECT id, session_id, captured_at, trigger, COALESCE(app_name, ''), COALESCE(window_title, ''), image_path, image_status, COALESCE(text, '') FROM frames WHERE 1=1",
@@ -532,12 +538,14 @@ fn write_jpeg(dir: &DataDir, rel: &RelativePath, jpeg: &[u8]) -> Result<PathBuf,
 
 fn ensure_owned_dir(path: &Path) -> Result<(), RecorderError> {
     match fs::symlink_metadata(path) {
-        Ok(meta) if meta.file_type().is_symlink() => {
-            Err(RecorderError::config("refusing to follow a symlink directory"))
-        }
+        Ok(meta) if meta.file_type().is_symlink() => Err(RecorderError::config(
+            "refusing to follow a symlink directory",
+        )),
         Ok(meta) if meta.is_dir() => Ok(()),
         Ok(_) => Err(RecorderError::config("expected a directory")),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => fs::create_dir(path).map_err(io_err),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            fs::create_dir(path).map_err(io_err)
+        }
         Err(err) => Err(io_err(err)),
     }
 }
@@ -625,7 +633,9 @@ fn delete_orphan_jpegs(dir: &DataDir, conn: &Connection) -> Result<(), RecorderE
     let mut stmt = conn
         .prepare("SELECT image_path FROM frames WHERE image_path IS NOT NULL")
         .map_err(db_err)?;
-    let rows = stmt.query_map([], |row| row.get::<_, String>(0)).map_err(db_err)?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(db_err)?;
     for row in rows {
         known.insert(row.map_err(db_err)?);
     }
@@ -671,7 +681,10 @@ fn walk_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), RecorderError> {
 
 fn is_jpeg(path: &Path) -> bool {
     matches!(
-        path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.to_ascii_lowercase()).as_deref(),
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_ascii_lowercase())
+            .as_deref(),
         Some("jpg") | Some("jpeg")
     )
 }
@@ -722,9 +735,7 @@ mod tests {
     use super::*;
     use crate::commit::FramePlan;
     use crate::imagebuf::{prepare_image, RawImage};
-    use crate::types::{
-        FocusIdentity, FrameId, ImageStatus, PixelPolicy, WindowRect,
-    };
+    use crate::types::{FocusIdentity, FrameId, ImageStatus, PixelPolicy, WindowRect};
 
     fn temp_dir() -> DataDir {
         static N: AtomicU64 = AtomicU64::new(1);
@@ -788,11 +799,9 @@ mod tests {
         assert_ne!(store.session_id().as_str(), id);
         let status: String = store
             .conn
-            .query_row(
-                "SELECT status FROM sessions WHERE id = ?1",
-                [&id],
-                |row| row.get(0),
-            )
+            .query_row("SELECT status FROM sessions WHERE id = ?1", [&id], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(status, "interrupted");
     }
@@ -815,10 +824,9 @@ mod tests {
         let full = dir.resolve(&rel).unwrap();
         assert!(full.is_file());
         assert!(full.canonicalize().unwrap().starts_with(dir.as_path()));
-        assert!(rel.as_str().starts_with(&format!(
-            "sessions/{}/frames/",
-            store.session_id().as_str()
-        )));
+        assert!(rel
+            .as_str()
+            .starts_with(&format!("sessions/{}/frames/", store.session_id().as_str())));
     }
 
     #[test]
@@ -845,7 +853,10 @@ mod tests {
         let partial = dir.as_path().join("tmp").join("crash.jpg.partial");
         fs::write(&partial, b"partial").unwrap();
         let _store = Store::open(dir.clone()).unwrap();
-        assert!(fs::read_dir(dir.as_path().join("tmp")).unwrap().next().is_none());
+        assert!(fs::read_dir(dir.as_path().join("tmp"))
+            .unwrap()
+            .next()
+            .is_none());
     }
 
     #[test]
@@ -865,7 +876,12 @@ mod tests {
 
     #[test]
     fn an_escaping_relative_path_is_rejected() {
-        for raw in ["../outside.jpg", "sessions/../../outside.jpg", "/tmp/x.jpg", "C:\\x.jpg"] {
+        for raw in [
+            "../outside.jpg",
+            "sessions/../../outside.jpg",
+            "/tmp/x.jpg",
+            "C:\\x.jpg",
+        ] {
             assert!(image_rel(raw).is_err(), "{raw}");
         }
         assert!(image_rel("sessions/abc/frames/a.jpg").is_ok());
@@ -907,7 +923,12 @@ mod tests {
             image_status: ImageStatus::WithheldRedaction,
         };
         let id = store
-            .commit(&plan, TriggerKind::Manual, &focus("password=hunter2"), b"jpeg")
+            .commit(
+                &plan,
+                TriggerKind::Manual,
+                &focus("password=hunter2"),
+                b"jpeg",
+            )
             .unwrap();
         assert!(store.frame_path(id).is_err());
         assert!(jpeg_files(dir.as_path()).is_empty());
@@ -947,11 +968,9 @@ mod tests {
         let store = Store::open(dir).unwrap();
         let status: String = store
             .conn
-            .query_row(
-                "SELECT status FROM sessions WHERE id = ?1",
-                [&id],
-                |row| row.get(0),
-            )
+            .query_row("SELECT status FROM sessions WHERE id = ?1", [&id], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(status, "completed");
     }

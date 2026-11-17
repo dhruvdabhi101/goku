@@ -33,7 +33,8 @@ pub trait Platform: Send {
     ) -> Result<AxSnapshot, RecorderError>;
     fn ocr(&self, image: &RawImage) -> Result<OcrSnapshot, RecorderError>;
     fn secure_input(&self) -> bool;
-    fn try_watch_input(&self, tx: Sender<InputBurst>) -> Result<Box<dyn InputWatch>, RecorderError>;
+    fn try_watch_input(&self, tx: Sender<InputBurst>)
+        -> Result<Box<dyn InputWatch>, RecorderError>;
 }
 
 pub trait InputWatch: Send {

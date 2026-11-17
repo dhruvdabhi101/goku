@@ -18,7 +18,8 @@ use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, HMONITOR, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+    CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+    COINIT_APARTMENTTHREADED,
 };
 use windows::Win32::System::Threading::{
     GetCurrentThreadId, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
@@ -29,13 +30,15 @@ use windows::Win32::System::WinRT::{
     IMemoryBufferByteAccess, RoInitialize, RO_INIT_SINGLETHREADED,
 };
 use windows::Win32::UI::Accessibility::{
-    IUIAutomation, IUIAutomationCacheRequest, IUIAutomationElement, IUIAutomationTreeWalker,
-    IUIAutomationValuePattern, CUIAutomation, TreeScope_Children, TreeScope_Element,
+    CUIAutomation, IUIAutomation, IUIAutomationCacheRequest, IUIAutomationElement,
+    IUIAutomationTreeWalker, IUIAutomationValuePattern, TreeScope_Children, TreeScope_Element,
     UIA_BoundingRectanglePropertyId, UIA_ControlTypePropertyId, UIA_DocumentControlTypeId,
     UIA_EditControlTypeId, UIA_HyperlinkControlTypeId, UIA_IsPasswordPropertyId,
     UIA_NamePropertyId, UIA_ValuePatternId, UIA_ValueValuePropertyId,
 };
-use windows::Win32::UI::HiDpi::{GetDpiForWindow, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2};
+use windows::Win32::UI::HiDpi::{
+    GetDpiForWindow, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowRect,
     GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, PostThreadMessageW,
@@ -68,7 +71,8 @@ pub struct WinPlatform;
 
 impl WinPlatform {
     pub fn new() -> Self {
-        let _ = unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+        let _ =
+            unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
         Self
     }
 }
@@ -122,7 +126,9 @@ impl Platform for WinPlatform {
 
     fn request(&self, kind: PermissionKind) -> Result<(), RecorderError> {
         match kind {
-            PermissionKind::Screen | PermissionKind::Accessibility | PermissionKind::Input => Ok(()),
+            PermissionKind::Screen | PermissionKind::Accessibility | PermissionKind::Input => {
+                Ok(())
+            }
         }
     }
 
@@ -164,7 +170,9 @@ impl Platform for WinPlatform {
             .spawn(move || tx.send(walk_window(hwnd, budget)).ok())
             .map_err(|err| RecorderError::AxFailed(err.to_string()))?;
         let result = rx
-            .recv_timeout(Duration::from_millis(budget.timeout_ms.max(AX_TIME_CAP.as_millis() as u64)))
+            .recv_timeout(Duration::from_millis(
+                budget.timeout_ms.max(AX_TIME_CAP.as_millis() as u64),
+            ))
             .unwrap_or(Ok(AxSnapshot {
                 segments: Vec::new(),
                 browser_url: None,
@@ -184,7 +192,10 @@ impl Platform for WinPlatform {
         false
     }
 
-    fn try_watch_input(&self, tx: Sender<InputBurst>) -> Result<Box<dyn InputWatch>, RecorderError> {
+    fn try_watch_input(
+        &self,
+        tx: Sender<InputBurst>,
+    ) -> Result<Box<dyn InputWatch>, RecorderError> {
         let (ready_tx, ready_rx) = mpsc::channel();
         let join = thread::Builder::new()
             .name("goku-hooks".into())
@@ -201,7 +212,9 @@ impl Platform for WinPlatform {
             }
             Err(_) => {
                 let _ = join.join();
-                Err(RecorderError::Message("input hook thread did not start".into()))
+                Err(RecorderError::Message(
+                    "input hook thread did not start".into(),
+                ))
             }
         }
     }
@@ -218,7 +231,8 @@ fn read_focus() -> Result<FocusSnapshot, RecorderError> {
         return Err(RecorderError::NoFocusedWindow);
     }
     let mut rect = RECT::default();
-    unsafe { GetWindowRect(hwnd, &mut rect) }.map_err(|err| RecorderError::capture(err.to_string()))?;
+    unsafe { GetWindowRect(hwnd, &mut rect) }
+        .map_err(|err| RecorderError::capture(err.to_string()))?;
     let width = rect.right.saturating_sub(rect.left).max(0) as u32;
     let height = rect.bottom.saturating_sub(rect.top).max(0) as u32;
     if width == 0 || height == 0 {
@@ -257,7 +271,12 @@ fn query_image_path(handle: HANDLE) -> Result<String, RecorderError> {
     let mut words = vec![0u16; 1024];
     let mut len = words.len() as u32;
     unsafe {
-        QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, windows::core::PWSTR(words.as_mut_ptr()), &mut len)
+        QueryFullProcessImageNameW(
+            handle,
+            PROCESS_NAME_WIN32,
+            windows::core::PWSTR(words.as_mut_ptr()),
+            &mut len,
+        )
     }
     .map_err(|err| RecorderError::capture(err.to_string()))?;
     Ok(String::from_utf16_lossy(&words[..len as usize]))
@@ -299,7 +318,9 @@ fn capture_one(
         CaptureScope::DisplayCrop => capture_item_for_monitor(hwnd)?,
         CaptureScope::FocusedWindow | CaptureScope::FocusedApp => capture_item_for_window(hwnd)?,
     };
-    let size = item.Size().map_err(|err| RecorderError::capture(err.to_string()))?;
+    let size = item
+        .Size()
+        .map_err(|err| RecorderError::capture(err.to_string()))?;
     if size.Width <= 0 || size.Height <= 0 {
         return Err(RecorderError::capture("capture item has no pixels"));
     }
@@ -336,8 +357,9 @@ fn capture_one(
 }
 
 fn capture_item_for_window(hwnd: HWND) -> Result<GraphicsCaptureItem, RecorderError> {
-    let interop: IGraphicsCaptureItemInterop = windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
-        .map_err(|err| RecorderError::capture(err.to_string()))?;
+    let interop: IGraphicsCaptureItemInterop =
+        windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
+            .map_err(|err| RecorderError::capture(err.to_string()))?;
     unsafe { interop.CreateForWindow(hwnd) }.map_err(|err| RecorderError::capture(err.to_string()))
 }
 
@@ -346,12 +368,15 @@ fn capture_item_for_monitor(hwnd: HWND) -> Result<GraphicsCaptureItem, RecorderE
     if monitor.0.is_null() {
         return Err(RecorderError::capture("window is not on a monitor"));
     }
-    let interop: IGraphicsCaptureItemInterop = windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
-        .map_err(|err| RecorderError::capture(err.to_string()))?;
-    unsafe { interop.CreateForMonitor(monitor) }.map_err(|err| RecorderError::capture(err.to_string()))
+    let interop: IGraphicsCaptureItemInterop =
+        windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
+            .map_err(|err| RecorderError::capture(err.to_string()))?;
+    unsafe { interop.CreateForMonitor(monitor) }
+        .map_err(|err| RecorderError::capture(err.to_string()))
 }
 
-fn capture_device() -> Result<windows::Graphics::DirectX::Direct3D11::IDirect3DDevice, RecorderError> {
+fn capture_device() -> Result<windows::Graphics::DirectX::Direct3D11::IDirect3DDevice, RecorderError>
+{
     Err(RecorderError::capture(
         "Graphics_DirectX_Direct3D11, Win32_Graphics_Direct3D11, Win32_Graphics_Dxgi, and Win32_System_WinRT_Direct3D11 are not enabled",
     ))
@@ -428,10 +453,9 @@ fn walk_window(hwnd: HWND, budget: WalkBudget) -> Result<AxSnapshot, RecorderErr
 }
 
 fn walk_window_com(hwnd: HWND, budget: WalkBudget) -> Result<AxSnapshot, RecorderError> {
-    let automation: IUIAutomation = unsafe {
-        CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
-    }
-    .map_err(|err| RecorderError::AxFailed(err.to_string()))?;
+    let automation: IUIAutomation =
+        unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }
+            .map_err(|err| RecorderError::AxFailed(err.to_string()))?;
     let root = unsafe { automation.ElementFromHandle(hwnd) }
         .map_err(|err| RecorderError::AxFailed(err.to_string()))?;
     let cache = unsafe { automation.CreateCacheRequest() }
@@ -443,7 +467,8 @@ fn walk_window_com(hwnd: HWND, budget: WalkBudget) -> Result<AxSnapshot, Recorde
         UIA_IsPasswordPropertyId,
         UIA_ValueValuePropertyId,
     ] {
-        unsafe { cache.AddProperty(property) }.map_err(|err| RecorderError::AxFailed(err.to_string()))?;
+        unsafe { cache.AddProperty(property) }
+            .map_err(|err| RecorderError::AxFailed(err.to_string()))?;
     }
     unsafe { cache.AddPattern(UIA_ValuePatternId) }.ok();
     unsafe { cache.SetTreeScope(TreeScope_Element | TreeScope_Children) }.ok();
@@ -504,7 +529,14 @@ fn visit(
         return;
     }
     *node_count += 1;
-    push_segment(element, segments, chars, char_cap, browser_url, document_path);
+    push_segment(
+        element,
+        segments,
+        chars,
+        char_cap,
+        browser_url,
+        document_path,
+    );
     if depth == depth_cap {
         *truncated = true;
         return;
@@ -543,7 +575,9 @@ fn push_segment(
     browser_url: &mut Option<String>,
     document_path: &mut Option<String>,
 ) {
-    let password = unsafe { element.CurrentIsPassword() }.unwrap_or(BOOL(0)).as_bool();
+    let password = unsafe { element.CurrentIsPassword() }
+        .unwrap_or(BOOL(0))
+        .as_bool();
     let role = control_role(element);
     let value = if password {
         String::new()
@@ -573,7 +607,9 @@ fn push_segment(
 }
 
 fn element_text(element: &IUIAutomationElement) -> String {
-    if let Ok(pattern) = unsafe { element.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) } {
+    if let Ok(pattern) =
+        unsafe { element.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) }
+    {
         if let Ok(value) = unsafe { pattern.CurrentValue() } {
             let text = value.to_string();
             if !text.is_empty() {
@@ -602,7 +638,10 @@ fn element_rect(element: &IUIAutomationElement) -> Option<PixelRect> {
 }
 
 fn control_role(element: &IUIAutomationElement) -> String {
-    match unsafe { element.CurrentControlType() }.map(|id| id.0).unwrap_or(0) {
+    match unsafe { element.CurrentControlType() }
+        .map(|id| id.0)
+        .unwrap_or(0)
+    {
         50004 => "edit".into(),
         50005 => "hyperlink".into(),
         50020 => "text".into(),
@@ -624,12 +663,19 @@ fn recognize(image: &RawImage) -> Result<OcrSnapshot, RecorderError> {
     let result = op
         .get()
         .map_err(|err| RecorderError::OcrFailed(format!("language missing or {err}")))?;
-    let lines = result.Lines().map_err(|err| RecorderError::OcrFailed(err.to_string()))?;
+    let lines = result
+        .Lines()
+        .map_err(|err| RecorderError::OcrFailed(err.to_string()))?;
     let mut segments = Vec::new();
     for line in lines {
-        let words = line.Words().map_err(|err| RecorderError::OcrFailed(err.to_string()))?;
+        let words = line
+            .Words()
+            .map_err(|err| RecorderError::OcrFailed(err.to_string()))?;
         for word in words {
-            let text = word.Text().map(|value| value.to_string()).unwrap_or_default();
+            let text = word
+                .Text()
+                .map(|value| value.to_string())
+                .unwrap_or_default();
             if text.is_empty() {
                 continue;
             }
@@ -719,7 +765,9 @@ fn hook_thread(tx: Sender<InputBurst>, ready: Sender<Result<u32, RecorderError>>
             if let Ok(hook) = key {
                 let _ = unsafe { UnhookWindowsHookEx(hook) };
             }
-            let _ = ready.send(Err(RecorderError::Message("low-level input hook failed".into())));
+            let _ = ready.send(Err(RecorderError::Message(
+                "low-level input hook failed".into(),
+            )));
             return;
         }
     };
@@ -744,7 +792,11 @@ fn hook_thread(tx: Sender<InputBurst>, ready: Sender<Result<u32, RecorderError>>
     *slot = None;
 }
 
-unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> windows::Win32::Foundation::LRESULT {
+unsafe extern "system" fn mouse_hook(
+    code: i32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> windows::Win32::Foundation::LRESULT {
     if code >= 0 {
         let message = wparam.0 as u32;
         if matches!(
@@ -764,10 +816,17 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
     unsafe { CallNextHookEx(hook, code, wparam, lparam) }
 }
 
-unsafe extern "system" fn key_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> windows::Win32::Foundation::LRESULT {
+unsafe extern "system" fn key_hook(
+    code: i32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> windows::Win32::Foundation::LRESULT {
     if code >= 0 && matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN) {
         let info = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
-        if !info.flags.contains(windows::Win32::UI::WindowsAndMessaging::LLKHF_UP) {
+        if !info
+            .flags
+            .contains(windows::Win32::UI::WindowsAndMessaging::LLKHF_UP)
+        {
             send_burst(InputBurst::Key);
         }
     }

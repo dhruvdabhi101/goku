@@ -20,7 +20,9 @@ impl CaptureScope {
             "focusedApp" => Ok(Self::FocusedApp),
             "focusedWindow" => Ok(Self::FocusedWindow),
             "displayCrop" => Ok(Self::DisplayCrop),
-            other => Err(RecorderError::config(format!("unknown capture scope {other}"))),
+            other => Err(RecorderError::config(format!(
+                "unknown capture scope {other}"
+            ))),
         }
     }
 }
@@ -119,7 +121,10 @@ pub enum PermissionState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Degradation {
-    ScopeFallback { requested: CaptureScope, used: CaptureScope },
+    ScopeFallback {
+        requested: CaptureScope,
+        used: CaptureScope,
+    },
     InputHooksUnavailable,
     AccessibilityUnavailable,
     OcrUnavailable,
@@ -143,14 +148,14 @@ impl SessionId {
     pub fn parse(raw: &str) -> Result<Self, RecorderError> {
         let ok = raw.len() >= 8
             && raw.len() <= 64
-            && raw
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            && raw.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
             && !raw.starts_with('-')
             && !raw.ends_with('-')
             && !raw.contains("--");
         if !ok {
-            return Err(RecorderError::config("session id must be 8-64 url-safe characters"));
+            return Err(RecorderError::config(
+                "session id must be 8-64 url-safe characters",
+            ));
         }
         Ok(Self(raw.to_string()))
     }
@@ -182,7 +187,9 @@ impl RelativePath {
         if raw.is_empty() || raw.starts_with('/') || raw.starts_with('\\') || raw.contains(':') {
             return Err(RecorderError::config("image path must be relative"));
         }
-        let bad = raw.split(['/', '\\']).any(|part| part.is_empty() || part == "." || part == "..");
+        let bad = raw
+            .split(['/', '\\'])
+            .any(|part| part.is_empty() || part == "." || part == "..");
         if bad {
             return Err(RecorderError::config("image path must not contain . or .."));
         }
@@ -212,8 +219,8 @@ impl DataDir {
     }
 
     pub fn resolve(&self, rel: &RelativePath) -> Result<PathBuf, RecorderError> {
-        let root_meta = std::fs::symlink_metadata(&self.0)
-            .map_err(|e| RecorderError::config(e.to_string()))?;
+        let root_meta =
+            std::fs::symlink_metadata(&self.0).map_err(|e| RecorderError::config(e.to_string()))?;
         if root_meta.file_type().is_symlink() {
             return Err(RecorderError::config("data dir is a symlink"));
         }

@@ -47,10 +47,16 @@ impl fmt::Display for SkipReason {
 impl CaptureFilter {
     pub fn with_default_excludes() -> Self {
         Self {
-            exclude_apps: ["1Password", "Bitwarden", "Keychain Access", "KeePass", "KeePassXC"]
-                .into_iter()
-                .map(str::to_string)
-                .collect(),
+            exclude_apps: [
+                "1Password",
+                "Bitwarden",
+                "Keychain Access",
+                "KeePass",
+                "KeePassXC",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
             ..Self::default()
         }
     }
@@ -83,11 +89,18 @@ impl CaptureFilter {
         let Some(url) = url else {
             return Ok(());
         };
-        if self.exclude_urls.iter().any(|pattern| url_matches(pattern, url)) {
+        if self
+            .exclude_urls
+            .iter()
+            .any(|pattern| url_matches(pattern, url))
+        {
             return Err(SkipReason::UrlExcluded);
         }
         if !self.include_urls.is_empty()
-            && !self.include_urls.iter().any(|pattern| url_matches(pattern, url))
+            && !self
+                .include_urls
+                .iter()
+                .any(|pattern| url_matches(pattern, url))
         {
             return Err(SkipReason::UrlNotIncluded);
         }
@@ -97,7 +110,11 @@ impl CaptureFilter {
 
 fn executable_name(app_id: &str) -> Option<&str> {
     let file = app_id.rsplit(['/', '\\']).next()?;
-    Some(file.strip_suffix(".exe").or(file.strip_suffix(".EXE")).unwrap_or(file))
+    Some(
+        file.strip_suffix(".exe")
+            .or(file.strip_suffix(".EXE"))
+            .unwrap_or(file),
+    )
 }
 
 fn url_matches(pattern: &str, url: &str) -> bool {
@@ -162,7 +179,10 @@ mod tests {
             filter.check_window(&focus("Slack", r"C:\Apps\slack.exe", "x")),
             Err(SkipReason::AppExcluded)
         );
-        assert_eq!(filter.check_window(&focus("TextEdit", "com.apple.TextEdit", "x")), Ok(()));
+        assert_eq!(
+            filter.check_window(&focus("TextEdit", "com.apple.TextEdit", "x")),
+            Ok(())
+        );
     }
 
     #[test]
@@ -171,7 +191,10 @@ mod tests {
             include_apps: vec!["TextEdit".into()],
             ..CaptureFilter::default()
         };
-        assert_eq!(filter.check_window(&focus("TextEdit", "com.apple.TextEdit", "a")), Ok(()));
+        assert_eq!(
+            filter.check_window(&focus("TextEdit", "com.apple.TextEdit", "a")),
+            Ok(())
+        );
         assert_eq!(
             filter.check_window(&focus("Notes", "com.apple.Notes", "a")),
             Err(SkipReason::AppNotIncluded)
@@ -198,7 +221,11 @@ mod tests {
             ..CaptureFilter::default()
         };
         assert_eq!(
-            filter.check_window(&focus("Safari", "com.apple.Safari", "News - Private Browsing")),
+            filter.check_window(&focus(
+                "Safari",
+                "com.apple.Safari",
+                "News - Private Browsing"
+            )),
             Err(SkipReason::TitleExcluded)
         );
     }
@@ -218,7 +245,10 @@ mod tests {
             Err(SkipReason::UrlExcluded)
         );
         assert_eq!(filter.check_url(Some("https://notbank.com/")), Ok(()));
-        assert_eq!(filter.check_url(Some("https://example.com/?r=bank.com")), Ok(()));
+        assert_eq!(
+            filter.check_url(Some("https://example.com/?r=bank.com")),
+            Ok(())
+        );
     }
 
     #[test]
@@ -227,7 +257,10 @@ mod tests {
             include_urls: vec!["https://github.com/dhruvdabhi101/".into()],
             ..CaptureFilter::default()
         };
-        assert_eq!(filter.check_url(Some("https://github.com/dhruvdabhi101/goku")), Ok(()));
+        assert_eq!(
+            filter.check_url(Some("https://github.com/dhruvdabhi101/goku")),
+            Ok(())
+        );
         assert_eq!(
             filter.check_url(Some("https://github.com/other/repo")),
             Err(SkipReason::UrlNotIncluded)

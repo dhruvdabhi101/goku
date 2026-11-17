@@ -193,7 +193,10 @@ impl Platform for MacPlatform {
         unsafe { IsSecureEventInputEnabled() }
     }
 
-    fn try_watch_input(&self, tx: Sender<InputBurst>) -> Result<Box<dyn InputWatch>, RecorderError> {
+    fn try_watch_input(
+        &self,
+        tx: Sender<InputBurst>,
+    ) -> Result<Box<dyn InputWatch>, RecorderError> {
         let (ready_tx, ready_rx) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let stop_for_thread = Arc::clone(&stop);
@@ -297,7 +300,8 @@ fn read_focus() -> Result<FocusSnapshot, RecorderError> {
             "accessibility permission is missing".into(),
         ));
     }
-    let system = system_wide().ok_or_else(|| RecorderError::AxFailed("no system element".into()))?;
+    let system =
+        system_wide().ok_or_else(|| RecorderError::AxFailed("no system element".into()))?;
     let _ = system.set_timeout(AX_MESSAGE_TIMEOUT_SECS);
     let app = system
         .focused_application()
@@ -306,13 +310,23 @@ fn read_focus() -> Result<FocusSnapshot, RecorderError> {
     let _ = app.set_timeout(AX_MESSAGE_TIMEOUT_SECS);
     let pid = app.pid().map_err(ax_err)?;
     if pid < 0 {
-        return Err(RecorderError::AxFailed("focused application has no pid".into()));
+        return Err(RecorderError::AxFailed(
+            "focused application has no pid".into(),
+        ));
     }
     let window = system
         .focused_window()
         .map_err(ax_err)?
-        .or_else(|| app.element_attribute(attributes::AX_FOCUSED_WINDOW_ATTRIBUTE).ok().flatten())
-        .or_else(|| app.element_attribute(attributes::AX_MAIN_WINDOW_ATTRIBUTE).ok().flatten())
+        .or_else(|| {
+            app.element_attribute(attributes::AX_FOCUSED_WINDOW_ATTRIBUTE)
+                .ok()
+                .flatten()
+        })
+        .or_else(|| {
+            app.element_attribute(attributes::AX_MAIN_WINDOW_ATTRIBUTE)
+                .ok()
+                .flatten()
+        })
         .ok_or(RecorderError::NoFocusedWindow)?;
     let _ = window.set_timeout(AX_MESSAGE_TIMEOUT_SECS);
     let (origin, size) = element_frame(&window)?;
@@ -366,7 +380,9 @@ fn read_focus() -> Result<FocusSnapshot, RecorderError> {
     })
 }
 
-fn element_frame(element: &AXUIElement) -> Result<(axuielement::AXPoint, axuielement::AXSize), RecorderError> {
+fn element_frame(
+    element: &AXUIElement,
+) -> Result<(axuielement::AXPoint, axuielement::AXSize), RecorderError> {
     let origin = element
         .point_attribute(attributes::AX_POSITION_ATTRIBUTE)
         .map_err(ax_err)?
@@ -408,7 +424,9 @@ fn resolve_window_id(pid: i32, rect: &WindowRect, title: &str) -> Result<u64, Re
     match pick_window_id(&hints, rect, title) {
         WindowPick::One(id) => Ok(id),
         WindowPick::Missing => Err(RecorderError::NoFocusedWindow),
-        WindowPick::Ambiguous => Err(RecorderError::AxFailed("focused window is ambiguous".into())),
+        WindowPick::Ambiguous => Err(RecorderError::AxFailed(
+            "focused window is ambiguous".into(),
+        )),
     }
 }
 
@@ -486,7 +504,10 @@ fn display_for(
 ) -> Result<SCDisplay, RecorderError> {
     let displays = content.displays();
     if focus.display_id != 0 {
-        if let Some(display) = displays.iter().find(|display| display.display_id() == focus.display_id) {
+        if let Some(display) = displays
+            .iter()
+            .find(|display| display.display_id() == focus.display_id)
+        {
             return Ok(display.clone());
         }
     }
@@ -539,8 +560,10 @@ fn logical_size(rect: &WindowRect) -> Result<(u32, u32), RecorderError> {
 }
 
 fn bgra_to_raw(image: &screencapturekit::CGImage) -> Result<RawImage, RecorderError> {
-    let width = u32::try_from(image.width()).map_err(|_| RecorderError::capture("image width overflows"))?;
-    let height = u32::try_from(image.height()).map_err(|_| RecorderError::capture("image height overflows"))?;
+    let width = u32::try_from(image.width())
+        .map_err(|_| RecorderError::capture("image width overflows"))?;
+    let height = u32::try_from(image.height())
+        .map_err(|_| RecorderError::capture("image height overflows"))?;
     let bgra = image.bgra_data().map_err(capture_err)?;
     let mut rgba = bgra;
     let mut index = 0;
@@ -637,7 +660,8 @@ struct Walk {
 }
 
 fn walk_window(focus: &FocusSnapshot, budget: &WalkBudget) -> Result<AxSnapshot, RecorderError> {
-    let system = system_wide().ok_or_else(|| RecorderError::AxFailed("no system element".into()))?;
+    let system =
+        system_wide().ok_or_else(|| RecorderError::AxFailed("no system element".into()))?;
     let _ = system.set_timeout(AX_MESSAGE_TIMEOUT_SECS);
     let app = system
         .focused_application()
@@ -652,7 +676,11 @@ fn walk_window(focus: &FocusSnapshot, budget: &WalkBudget) -> Result<AxSnapshot,
     let window = app
         .element_attribute(attributes::AX_FOCUSED_WINDOW_ATTRIBUTE)
         .map_err(ax_err)?
-        .or_else(|| app.element_attribute(attributes::AX_MAIN_WINDOW_ATTRIBUTE).ok().flatten())
+        .or_else(|| {
+            app.element_attribute(attributes::AX_MAIN_WINDOW_ATTRIBUTE)
+                .ok()
+                .flatten()
+        })
         .ok_or(RecorderError::NoFocusedWindow)?;
     let _ = window.set_timeout(AX_MESSAGE_TIMEOUT_SECS);
     same_ax_window(&window, focus)?;
@@ -743,7 +771,12 @@ impl Walk {
             .string_attribute(attributes::AXURL_ATTRIBUTE)
             .ok()
             .flatten()
-            .or_else(|| element.string_attribute(attributes::AX_DOCUMENT_ATTRIBUTE).ok().flatten())
+            .or_else(|| {
+                element
+                    .string_attribute(attributes::AX_DOCUMENT_ATTRIBUTE)
+                    .ok()
+                    .flatten()
+            })
             .filter(|value| !value.is_empty());
     }
 
@@ -764,7 +797,9 @@ impl Walk {
             || role == "AXSecureTextField";
         if secure {
             let bbox = match element_frame(element) {
-                Ok((origin, size)) => clip_to_window(origin.x, origin.y, size.width, size.height, self.window),
+                Ok((origin, size)) => {
+                    clip_to_window(origin.x, origin.y, size.width, size.height, self.window)
+                }
                 Err(_) => {
                     let cover = cover_window(self.window);
                     if cover.is_empty() {
@@ -872,13 +907,25 @@ fn cover_window(window: PixelRect) -> PixelRect {
 }
 
 fn element_bbox(element: &AXUIElement, window: PixelRect) -> Option<PixelRect> {
-    let origin = element.point_attribute(attributes::AX_POSITION_ATTRIBUTE).ok().flatten()?;
-    let size = element.size_attribute(attributes::AX_SIZE_ATTRIBUTE).ok().flatten()?;
+    let origin = element
+        .point_attribute(attributes::AX_POSITION_ATTRIBUTE)
+        .ok()
+        .flatten()?;
+    let size = element
+        .size_attribute(attributes::AX_SIZE_ATTRIBUTE)
+        .ok()
+        .flatten()?;
     clip_to_window(origin.x, origin.y, size.width, size.height, window)
 }
 
 fn clip_to_window(x: f64, y: f64, width: f64, height: f64, window: PixelRect) -> Option<PixelRect> {
-    if !x.is_finite() || !y.is_finite() || !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+    if !x.is_finite()
+        || !y.is_finite()
+        || !width.is_finite()
+        || !height.is_finite()
+        || width <= 0.0
+        || height <= 0.0
+    {
         return None;
     }
     let left = (x - f64::from(window.x)).floor() as i64;
@@ -906,7 +953,8 @@ fn recognize(image: &RawImage) -> Result<OcrSnapshot, RecorderError> {
     let request = VNRecognizeTextRequest::new();
     request.setRecognitionLevel(VNRequestTextRecognitionLevel::Fast);
     request.setUsesLanguageCorrection(false);
-    let as_request: Retained<VNRequest> = Retained::into_super(Retained::into_super(request.clone()));
+    let as_request: Retained<VNRequest> =
+        Retained::into_super(Retained::into_super(request.clone()));
     let requests = NSArray::from_retained_slice(&[as_request]);
     let options: Retained<NSDictionary<objc2_vision::VNImageOption, objc2::runtime::AnyObject>> =
         NSDictionary::dictionary();
@@ -945,7 +993,11 @@ fn recognize(image: &RawImage) -> Result<OcrSnapshot, RecorderError> {
 
 fn jpeg_bytes(image: &RawImage) -> Result<Vec<u8>, RecorderError> {
     let mut out = Vec::new();
-    let rgb: Vec<u8> = image.rgba.chunks_exact(4).flat_map(|px| px[..3].iter().copied()).collect();
+    let rgb: Vec<u8> = image
+        .rgba
+        .chunks_exact(4)
+        .flat_map(|px| px[..3].iter().copied())
+        .collect();
     let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 80);
     encoder
         .encode(
@@ -1045,14 +1097,7 @@ fn display_id_at(x: f64, y: f64) -> u32 {
 fn display_scale_at(x: f64, y: f64) -> u32 {
     let mut display = 0_u32;
     let mut count = 0_u32;
-    let found = unsafe {
-        CGGetDisplaysWithPoint(
-            CGPoint { x, y },
-            1,
-            &mut display,
-            &mut count,
-        )
-    };
+    let found = unsafe { CGGetDisplaysWithPoint(CGPoint { x, y }, 1, &mut display, &mut count) };
     if found != 0 || count == 0 {
         return 1;
     }
@@ -1081,7 +1126,8 @@ struct CGPoint {
 unsafe extern "C" {
     fn CGPreflightListenEventAccess() -> bool;
     fn CGRequestListenEventAccess() -> bool;
-    fn CGGetDisplaysWithPoint(point: CGPoint, max: u32, displays: *mut u32, count: *mut u32) -> i32;
+    fn CGGetDisplaysWithPoint(point: CGPoint, max: u32, displays: *mut u32, count: *mut u32)
+        -> i32;
     fn CGDisplayCopyDisplayMode(display: u32) -> *mut std::ffi::c_void;
     fn CGDisplayModeGetPixelWidth(mode: *mut std::ffi::c_void) -> usize;
     fn CGDisplayModeGetWidth(mode: *mut std::ffi::c_void) -> usize;
@@ -1096,7 +1142,11 @@ unsafe extern "C" {
 #[link(name = "CoreFoundation", kind = "framework")]
 unsafe extern "C" {
     static kCFRunLoopDefaultMode: *const std::ffi::c_void;
-    fn CFRunLoopRunInMode(mode: *const std::ffi::c_void, seconds: f64, return_after_source: i32) -> i32;
+    fn CFRunLoopRunInMode(
+        mode: *const std::ffi::c_void,
+        seconds: f64,
+        return_after_source: i32,
+    ) -> i32;
 }
 
 #[cfg(test)]
@@ -1147,9 +1197,25 @@ mod tests {
             height: 40,
         };
         let inside = clip_to_window(110.0, 210.0, 10.0, 8.0, window).unwrap();
-        assert_eq!(inside, PixelRect { x: 10, y: 10, width: 10, height: 8 });
+        assert_eq!(
+            inside,
+            PixelRect {
+                x: 10,
+                y: 10,
+                width: 10,
+                height: 8
+            }
+        );
         let partial = clip_to_window(90.0, 190.0, 20.0, 20.0, window).unwrap();
-        assert_eq!(partial, PixelRect { x: 0, y: 0, width: 10, height: 10 });
+        assert_eq!(
+            partial,
+            PixelRect {
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10
+            }
+        );
         assert!(clip_to_window(0.0, 0.0, 10.0, 10.0, window).is_none());
         let covered = cover_window(window);
         assert_eq!(covered.width, window.width);
@@ -1184,7 +1250,10 @@ mod tests {
                 title: "Notes".into(),
             },
         ];
-        assert!(matches!(pick_window_id(&hints, &rect, "Notes"), WindowPick::One(7)));
+        assert!(matches!(
+            pick_window_id(&hints, &rect, "Notes"),
+            WindowPick::One(7)
+        ));
         let tied = [
             WindowHint {
                 id: 7,
@@ -1203,8 +1272,14 @@ mod tests {
                 title: "B".into(),
             },
         ];
-        assert!(matches!(pick_window_id(&tied, &rect, ""), WindowPick::Ambiguous));
-        assert!(matches!(pick_window_id(&tied, &rect, "A"), WindowPick::One(7)));
+        assert!(matches!(
+            pick_window_id(&tied, &rect, ""),
+            WindowPick::Ambiguous
+        ));
+        assert!(matches!(
+            pick_window_id(&tied, &rect, "A"),
+            WindowPick::One(7)
+        ));
     }
 
     #[test]

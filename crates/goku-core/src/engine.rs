@@ -10,9 +10,9 @@ use crate::filter::SkipReason;
 use crate::imagebuf::{encode_jpeg, RawImage};
 use crate::platform::{self, resolve_scope, InputBurst, InputWatch, Platform};
 use crate::redact::redact_text;
+use crate::store::ReadStore;
 use crate::store::Store;
 use crate::triggers::consider;
-use crate::store::ReadStore;
 use crate::types::{
     Config, Degradation, DiagnoseReport, FocusSnapshot, Frame, FrameId, FrameSummary,
     PermissionKind, PermissionReport, PermissionState, PixelPolicy, PixelRect, RecentFramesQuery,
@@ -134,7 +134,10 @@ impl Recorder {
             Life::Starting => {
                 *life = Life::StopRequested;
                 loop {
-                    life = self.gate_cv.wait(life).unwrap_or_else(|err| err.into_inner());
+                    life = self
+                        .gate_cv
+                        .wait(life)
+                        .unwrap_or_else(|err| err.into_inner());
                     if matches!(*life, Life::Idle) {
                         break;
                     }
@@ -204,7 +207,10 @@ impl Recorder {
         })
     }
 
-    pub fn recent_frames(&self, query: RecentFramesQuery) -> Result<Vec<FrameSummary>, RecorderError> {
+    pub fn recent_frames(
+        &self,
+        query: RecentFramesQuery,
+    ) -> Result<Vec<FrameSummary>, RecorderError> {
         match ReadStore::open(&self.config.data_dir) {
             Ok(read) => read.recent(&query),
             Err(_) => Ok(Vec::new()),
@@ -264,16 +270,20 @@ impl Recorder {
     }
 
     pub fn request_permission(&self, kind: PermissionKind) -> Result<(), RecorderError> {
-        self.platform_call(|platform| platform.request(kind), |tx, reply| {
-            Command::Request { kind, reply }
-        })
+        self.platform_call(
+            |platform| platform.request(kind),
+            |tx, reply| Command::Request { kind, reply },
+        )
     }
 
     pub fn open_settings(&self, kind: PermissionKind) -> Result<(), RecorderError> {
-        self.platform_call(|platform| platform.open_settings(kind), |tx, reply| {
-            let _ = tx;
-            Command::OpenSettings { kind, reply }
-        })
+        self.platform_call(
+            |platform| platform.open_settings(kind),
+            |tx, reply| {
+                let _ = tx;
+                Command::OpenSettings { kind, reply }
+            },
+        )
     }
 
     pub fn degradations(&self) -> Vec<Degradation> {
@@ -293,7 +303,17 @@ impl Recorder {
         self.paused.store(false, Ordering::Release);
         let handle = thread::Builder::new()
             .name("goku-recorder".into())
-            .spawn(move || worker_loop(platform, store, config, rx, degradations, paused, subscribers))
+            .spawn(move || {
+                worker_loop(
+                    platform,
+                    store,
+                    config,
+                    rx,
+                    degradations,
+                    paused,
+                    subscribers,
+                )
+            })
             .map_err(|err| RecorderError::Message(err.to_string()))?;
         Ok((tx, handle))
     }
@@ -566,10 +586,7 @@ impl Worker {
     }
 
     fn fire_settled(&mut self) {
-        if self
-            .click_at
-            .is_some_and(|at| at.elapsed() >= CLICK_SETTLE)
-        {
+        if self.click_at.is_some_and(|at| at.elapsed() >= CLICK_SETTLE) {
             self.click_at = None;
             self.note(TriggerKind::Click);
         }
@@ -591,7 +608,11 @@ impl Worker {
                 self.note(TriggerKind::ScrollStop);
             }
         }
-        if self.focus_armed.as_ref().is_some_and(|armed| armed.at <= Instant::now()) {
+        if self
+            .focus_armed
+            .as_ref()
+            .is_some_and(|armed| armed.at <= Instant::now())
+        {
             let kind = self.focus_armed.take().map(|armed| armed.kind);
             if let Some(kind) = kind {
                 self.note(kind);
@@ -602,7 +623,8 @@ impl Worker {
                 .last_fire
                 .map(|at| at.elapsed().as_millis() as u64)
                 .unwrap_or(u64::MAX);
-            if self.last_activity.elapsed() >= Duration::from_millis(idle_ms) && since_fire >= idle_ms
+            if self.last_activity.elapsed() >= Duration::from_millis(idle_ms)
+                && since_fire >= idle_ms
             {
                 self.note(TriggerKind::Idle);
             }
@@ -675,7 +697,10 @@ fn run_capture(
     if config.exclude_own_app && before.identity.pid == std::process::id() {
         return Err(RecorderError::Skipped(SkipReason::OwnApp));
     }
-    config.filter.check_window(&before).map_err(RecorderError::Skipped)?;
+    config
+        .filter
+        .check_window(&before)
+        .map_err(RecorderError::Skipped)?;
     let secure = config.pause_on_secure_input && platform.secure_input();
     let mut permission_missing = platform.permissions().screen == PermissionState::Denied;
     let mut raw = None;
@@ -742,9 +767,9 @@ fn run_capture(
         return Err(RecorderError::capture("focus changed during capture"));
     }
     let jpeg = match &plan {
-        FramePlan::Row { image: Some(image), .. } => {
-            encode_jpeg(image, config.capture.jpeg_quality)?
-        }
+        FramePlan::Row {
+            image: Some(image), ..
+        } => encode_jpeg(image, config.capture.jpeg_quality)?,
         _ => Vec::new(),
     };
     store.commit(&plan, trigger, &after, &jpeg)
@@ -788,7 +813,11 @@ fn extract_text(
     let (flat, pieces) = join_text(&segments);
     let mut redacted = redact_text(&flat);
     attach_regions(&flat, &mut redacted.hits, &segments, &pieces);
-    merge_extra(&focus.window_title, &mut redacted.hits, &mut redacted.labels);
+    merge_extra(
+        &focus.window_title,
+        &mut redacted.hits,
+        &mut redacted.labels,
+    );
     if let Some(url) = browser_url.as_deref() {
         merge_extra(url, &mut redacted.hits, &mut redacted.labels);
     }
@@ -810,7 +839,9 @@ fn extract_text(
     let reliable = match config.text_mode {
         TextMode::OcrOnly => ocr_ok,
         TextMode::Both => ax_ok || ocr_ok,
-        TextMode::AccessibilityFirst => ax_ok || (attempted_ocr && ocr_ok) || (ax_ok && !attempted_ocr),
+        TextMode::AccessibilityFirst => {
+            ax_ok || (attempted_ocr && ocr_ok) || (ax_ok && !attempted_ocr)
+        }
     };
     Extracted {
         browser_url,
@@ -876,7 +907,12 @@ fn join_text(segments: &[TextSegment]) -> (String, Vec<Piece>) {
     (out, pieces)
 }
 
-fn attach_regions(source: &str, hits: &mut [SecretHit], segments: &[TextSegment], pieces: &[Piece]) {
+fn attach_regions(
+    source: &str,
+    hits: &mut [SecretHit],
+    segments: &[TextSegment],
+    pieces: &[Piece],
+) {
     for hit in hits {
         if source.get(hit.start..hit.end).is_none() || hit.start >= hit.end {
             hit.region = None;
@@ -905,8 +941,10 @@ fn union_rect(acc: Option<PixelRect>, next: PixelRect) -> PixelRect {
     };
     let x0 = acc.x.min(next.x);
     let y0 = acc.y.min(next.y);
-    let x1 = (i64::from(acc.x) + i64::from(acc.width)).max(i64::from(next.x) + i64::from(next.width));
-    let y1 = (i64::from(acc.y) + i64::from(acc.height)).max(i64::from(next.y) + i64::from(next.height));
+    let x1 =
+        (i64::from(acc.x) + i64::from(acc.width)).max(i64::from(next.x) + i64::from(next.width));
+    let y1 =
+        (i64::from(acc.y) + i64::from(acc.height)).max(i64::from(next.y) + i64::from(next.height));
     PixelRect {
         x: x0,
         y: y0,
@@ -954,8 +992,8 @@ fn password_rects(segments: &[TextSegment]) -> Vec<PixelRect> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::mpsc::Sender;
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+    use std::sync::mpsc::Sender;
 
     use crate::imagebuf::RawImage;
     use crate::platform::{InputBurst, InputWatch};
@@ -1155,7 +1193,12 @@ mod tests {
         let mut spanning = hits[0].clone();
         spanning.start = 0;
         spanning.end = joined.len();
-        attach_regions(&joined, std::slice::from_mut(&mut spanning), &segments, &pieces);
+        attach_regions(
+            &joined,
+            std::slice::from_mut(&mut spanning),
+            &segments,
+            &pieces,
+        );
         assert!(spanning.region.unwrap().width > first.width);
 
         let mut unboxed = segments.clone();
@@ -1165,7 +1208,12 @@ mod tests {
         let mut across = hits[0].clone();
         across.start = 0;
         across.end = joined.len();
-        attach_regions(&joined, std::slice::from_mut(&mut across), &unboxed, &pieces);
+        attach_regions(
+            &joined,
+            std::slice::from_mut(&mut across),
+            &unboxed,
+            &pieces,
+        );
         assert!(across.region.is_none());
         let _ = hits;
     }
@@ -1188,14 +1236,7 @@ mod tests {
             ax(vec![seg(&format!("token {KEY}"), Some(box_at()))]),
         );
         let mut deg = Vec::new();
-        let id = run_capture(
-            &platform,
-            &store,
-            &config,
-            TriggerKind::Manual,
-            &mut deg,
-        )
-        .unwrap();
+        let id = run_capture(&platform, &store, &config, TriggerKind::Manual, &mut deg).unwrap();
         let row = &store.recent_frames(1).unwrap()[0];
         assert_eq!(row.id, id);
         assert!(!row.text.contains(KEY));
@@ -1209,10 +1250,7 @@ mod tests {
     fn an_unmapped_secret_withholds_the_image() {
         let (_path, config) = temp_config();
         let store = Store::open(config.data_dir.clone()).unwrap();
-        let platform = FakePlatform::stable(
-            focus(1, "Notes", "scratch"),
-            ax(vec![seg(KEY, None)]),
-        );
+        let platform = FakePlatform::stable(focus(1, "Notes", "scratch"), ax(vec![seg(KEY, None)]));
         let id = run_capture(
             &platform,
             &store,
@@ -1292,10 +1330,19 @@ mod tests {
         let (_path, mut config) = temp_config();
         config.filter.exclude_urls = vec!["bank.com".into()];
         let store = Store::open(config.data_dir.clone()).unwrap();
-        let mut snapshot = ax(vec![seg("balance and account details for the user", Some(box_at()))]);
+        let mut snapshot = ax(vec![seg(
+            "balance and account details for the user",
+            Some(box_at()),
+        )]);
         snapshot.browser_url = Some("https://online.bank.com/home".into());
         let platform = FakePlatform::stable(focus(1, "Safari", "Bank"), snapshot);
-        let result = run_capture(&platform, &store, &config, TriggerKind::AppSwitch, &mut Vec::new());
+        let result = run_capture(
+            &platform,
+            &store,
+            &config,
+            TriggerKind::AppSwitch,
+            &mut Vec::new(),
+        );
         assert_eq!(result, Err(RecorderError::Skipped(SkipReason::UrlExcluded)));
         assert!(store.recent_frames(10).unwrap().is_empty());
     }
@@ -1304,7 +1351,13 @@ mod tests {
     fn focused_app_on_a_window_only_platform_records_the_fallback() {
         let (_path, config) = temp_config();
         let store = Store::open(config.data_dir.clone()).unwrap();
-        let mut platform = FakePlatform::stable(focus(1, "Notes", "a"), ax(vec![seg("hello there, this is enough text", Some(box_at()))]));
+        let mut platform = FakePlatform::stable(
+            focus(1, "Notes", "a"),
+            ax(vec![seg(
+                "hello there, this is enough text",
+                Some(box_at()),
+            )]),
+        );
         platform.scopes = vec![CaptureScope::FocusedWindow, CaptureScope::DisplayCrop];
         let mut deg = Vec::new();
         run_capture(&platform, &store, &config, TriggerKind::Manual, &mut deg).unwrap();
@@ -1325,7 +1378,8 @@ mod tests {
     fn thin_accessibility_text_falls_back_to_ocr() {
         let (_path, config) = temp_config();
         let store = Store::open(config.data_dir.clone()).unwrap();
-        let mut platform = FakePlatform::stable(focus(1, "Notes", "a"), ax(vec![seg("ok", Some(box_at()))]));
+        let mut platform =
+            FakePlatform::stable(focus(1, "Notes", "a"), ax(vec![seg("ok", Some(box_at()))]));
         *platform.ocr.lock().unwrap() = Ok(OcrSnapshot {
             segments: vec![TextSegment {
                 text: format!("canvas {KEY}"),
@@ -1357,7 +1411,10 @@ mod tests {
         let (watch, rx) = open_watch(&platform, &config, &slot);
         assert!(watch.is_none());
         assert!(rx.is_none());
-        assert_eq!(lock(&slot).as_slice(), &[Degradation::InputHooksUnavailable]);
+        assert_eq!(
+            lock(&slot).as_slice(),
+            &[Degradation::InputHooksUnavailable]
+        );
     }
 
     #[test]
